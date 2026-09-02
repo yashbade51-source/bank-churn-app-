@@ -607,6 +607,14 @@ def plot_churn_by_age_group(df):
 
 
 # ============================================================
+# NAVIGATION HELPER
+# ============================================================
+
+def set_nav_page(page_name):
+    st.session_state.nav_page = page_name
+
+
+# ============================================================
 # SIDEBAR NAVIGATION
 # ============================================================
 
@@ -615,16 +623,15 @@ with st.sidebar:
     st.caption("Customer Churn, SHAP & AI Retention Platform")
     st.divider()
 
-    nav_selection = st.radio(
-        "Navigation",
-        options=["Home", "Customer Prediction", "Analytics", "Data Upload"],
-        index=["Home", "Customer Prediction", "Analytics", "Data Upload"].index(st.session_state.nav_page),
-        key="sidebar_nav"
-    )
+    NAV_OPTIONS = ["Home", "Customer Prediction", "Analytics", "Data Upload"]
+    if "nav_page" not in st.session_state or st.session_state.nav_page not in NAV_OPTIONS:
+        st.session_state.nav_page = "Home"
 
-    if nav_selection != st.session_state.nav_page:
-        st.session_state.nav_page = nav_selection
-        st.rerun()
+    st.radio(
+        "Navigation",
+        options=NAV_OPTIONS,
+        key="nav_page"
+    )
 
     st.divider()
     st.markdown("##### ⚙️ AI Copilot Engine")
@@ -728,9 +735,12 @@ if st.session_state.nav_page == "Home":
 
     st.divider()
     st.markdown("##### Evaluate an Individual Customer")
-    if st.button("Launch Customer Assessment →", type="primary"):
-        st.session_state.nav_page = "Customer Prediction"
-        st.rerun()
+    st.button(
+        "Launch Customer Assessment →",
+        type="primary",
+        on_click=set_nav_page,
+        args=("Customer Prediction",)
+    )
 
 
 # ============================================================
@@ -739,7 +749,7 @@ if st.session_state.nav_page == "Home":
 
 elif st.session_state.nav_page == "Customer Prediction":
 
-    st.title("🔮 Customer Churn Assessment & AI Copilot")
+    st.title("🏦 Customer Churn Assessment & AI Copilot")
     st.write(
         "Enter customer demographic and account parameters to evaluate churn risk, inspect SHAP drivers, "
         "and generate targeted retention plans using the AI Copilot."
@@ -1038,18 +1048,7 @@ elif st.session_state.nav_page == "Customer Prediction":
 
         st.divider()
 
-        # Preserved Rule-Based Strategy
-        st.subheader("📋 Playbook Strategy & Recommended Actions")
-        st.markdown(f"#### Strategy: {p['primary_strategy']}")
-
-        st.markdown("**Trigger Indicators:**")
-        for dr in p['detected_reasons']:
-            st.markdown(f"- {dr}")
-
-        st.markdown("**Action Checklist:**")
-        for act in p['recommended_actions']:
-            st.markdown(f"- [ ] {act}")
-
+        
 
 # ============================================================
 # PAGE 3 — STATISTICS / ANALYTICS (EDA DASHBOARD)
