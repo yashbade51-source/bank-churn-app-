@@ -197,13 +197,6 @@ GEOGRAPHY_OPTIONS = [
     "France",
     "Germany",
     "Spain",
-    "Italy",
-    "Netherlands",
-    "Belgium",
-    "Portugal",
-    "Switzerland",
-    "Austria",
-    "Other",
 ]
 
 FEATURE_NAME_MAP = {
@@ -215,7 +208,7 @@ FEATURE_NAME_MAP = {
     "HasCrCard": "Credit Card Ownership",
     "IsActiveMember": "Active Membership",
     "EstimatedSalary": "Estimated Salary",
-    "Gender_Male": "Gender (Male)",
+    "Gender_Male": "Gender",
     "Geography_Germany": "Location: Germany",
     "Geography_Spain": "Location: Spain",
     "Geography_France": "Location: France",
@@ -227,7 +220,36 @@ FEATURE_NAME_MAP = {
     "Point Earned": "Reward Points",
 }
 
-def friendly_feature_name(feature):
+def friendly_feature_name(feature, value=None):
+    if feature == "Gender_Male":
+        if value is not None:
+            return "Gender: Male" if float(value) == 1.0 else "Gender: Female"
+        return "Gender"
+
+    if feature == "Geography_Germany":
+        if value is not None:
+            return "Location: Germany" if float(value) == 1.0 else "Location: Non-Germany"
+        return "Location: Germany"
+
+    if feature == "Geography_Spain":
+        if value is not None:
+            return "Location: Spain" if float(value) == 1.0 else "Location: Non-Spain"
+        return "Location: Spain"
+
+    if feature.startswith("Card Type_"):
+        card_tier = feature.replace("Card Type_", "").title()
+        return f"Card Tier: {card_tier}"
+
+    if feature == "IsActiveMember":
+        if value is not None:
+            return "Active Member" if float(value) == 1.0 else "Inactive Member"
+        return "Active Membership"
+
+    if feature == "HasCrCard":
+        if value is not None:
+            return "Has Credit Card" if float(value) == 1.0 else "No Credit Card"
+        return "Credit Card Ownership"
+
     return FEATURE_NAME_MAP.get(feature, feature.replace("_", " "))
 
 
@@ -307,8 +329,14 @@ def get_shap_explanation(input_encoded):
                 .reset_index(drop=True)
             )
 
-            risk_names = [friendly_feature_name(f) for f in risk_factors["Feature"].tolist()]
-            protective_names = [friendly_feature_name(f) for f in protective_factors["Feature"].tolist()]
+            risk_names = [
+                friendly_feature_name(row["Feature"], row["Input Value"])
+                for _, row in risk_factors.iterrows()
+            ]
+            protective_names = [
+                friendly_feature_name(row["Feature"], row["Input Value"])
+                for _, row in protective_factors.iterrows()
+            ]
 
             return risk_names, protective_names, local_shap
         except Exception:
@@ -324,6 +352,11 @@ def get_shap_explanation(input_encoded):
     protective_names = []
 
     # Calculate contribution signals based on banking risk patterns
+    if row.get("Gender_Male", 0) == 0:
+        risk_names.append("Gender: Female (Higher historical churn cohort)")
+    else:
+        protective_names.append("Gender: Male (Lower historical churn cohort)")
+
     if row.get("NumOfProducts", 1) == 1:
         risk_names.append("Single Product Holding (NumOfProducts=1)")
     elif row.get("NumOfProducts", 1) == 2:
@@ -620,7 +653,6 @@ def set_nav_page(page_name):
 
 with st.sidebar:
     st.markdown("### 🏦 Banking Intelligence")
-    st.caption("Customer Churn, SHAP & AI Retention Platform")
     st.divider()
 
     NAV_OPTIONS = ["Home", "Customer Prediction", "Analytics", "Data Upload"]
@@ -635,7 +667,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown("##### 🤖 AI Engine")
-    st.info("🦙 Ollama (Llama 3.2)")
+    st.info("🦙 Ollama")
 
     st.divider()
     st.markdown("##### 📁 Active Data Source")
@@ -650,12 +682,6 @@ with st.sidebar:
 if st.session_state.nav_page == "Home":
 
     st.title("🏦 Bank Customer Churn & Retention Platform")
-    """st.write(
-        "Welcome to the integrated Banking Intelligence Platform. "
-        "Combine predictive Machine Learning (XGBoost), Explainable AI (SHAP), "
-        "and Generative AI Retention Copilots to identify risk early, understand customer drivers, "
-        "and take high-impact retention actions."
-    )"""
     st.divider()
 
 
@@ -717,7 +743,7 @@ elif st.session_state.nav_page == "Customer Prediction":
     )
     st.divider()
 
-    st.subheader("1. Mandatory Customer Profile (*)")
+    st.subheader("Mandatory Customer Profile")
 
     mand_col1, mand_col2 = st.columns(2)
 
@@ -764,9 +790,6 @@ elif st.session_state.nav_page == "Customer Prediction":
             options=GEOGRAPHY_OPTIONS,
             help="Customer primary country of residence"
         )
-
-        if geography not in SUPPORTED_MODEL_GEOGRAPHIES:
-            st.caption(f"ℹ️ Note: '{geography}' is mapped to base regional profile for encoding.")
 
         gender = st.selectbox(
             "Gender *",
