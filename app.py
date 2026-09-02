@@ -224,31 +224,62 @@ FEATURE_NAME_MAP = {
     "Point Earned": "Reward Points",
 }
 
-def friendly_feature_name(feature, value=None):
+def friendly_feature_name(feature, value=None, input_row=None):
+    """Return a human-readable label for a model feature.
+
+    When *input_row* (a Series / dict of all encoded feature values) is
+    provided, the function cross-references related one-hot columns to
+    determine the **actual** category (e.g. the real country or gender)
+    instead of falling back to generic labels like "Non-Germany".
+    """
+
+    # --- Gender ---
     if feature == "Gender_Male":
+        if input_row is not None:
+            is_male = float(input_row.get("Gender_Male", 0))
+            return "Gender: Male" if is_male == 1.0 else "Gender: Female"
         if value is not None:
             return "Gender: Male" if float(value) == 1.0 else "Gender: Female"
         return "Gender"
 
-    if feature == "Geography_Germany":
+    # --- Geography ---
+    if feature in ("Geography_Germany", "Geography_Spain"):
+        if input_row is not None:
+            is_germany = float(input_row.get("Geography_Germany", 0))
+            is_spain = float(input_row.get("Geography_Spain", 0))
+            if is_germany == 1.0:
+                return "Location: Germany"
+            elif is_spain == 1.0:
+                return "Location: Spain"
+            else:
+                return "Location: France"
         if value is not None:
-            return "Location: Germany" if float(value) == 1.0 else "Location: Non-Germany"
-        return "Location: Germany"
+            if feature == "Geography_Germany":
+                return "Location: Germany" if float(value) == 1.0 else "Location: Non-Germany"
+            else:
+                return "Location: Spain" if float(value) == 1.0 else "Location: Non-Spain"
+        return FEATURE_NAME_MAP.get(feature, feature.replace("_", " "))
 
-    if feature == "Geography_Spain":
-        if value is not None:
-            return "Location: Spain" if float(value) == 1.0 else "Location: Non-Spain"
-        return "Location: Spain"
-
+    # --- Card Type ---
     if feature.startswith("Card Type_"):
+        if input_row is not None:
+            # Find which card type column is active
+            for col_name in ("Card Type_GOLD", "Card Type_PLATINUM",
+                             "Card Type_SILVER", "Card Type_DIAMOND"):
+                if float(input_row.get(col_name, 0)) == 1.0:
+                    tier = col_name.replace("Card Type_", "").title()
+                    return f"Card Tier: {tier}"
+            return "Card Tier: Diamond"  # baseline when drop_first=True
         card_tier = feature.replace("Card Type_", "").title()
         return f"Card Tier: {card_tier}"
 
+    # --- Active Member ---
     if feature == "IsActiveMember":
         if value is not None:
             return "Active Member" if float(value) == 1.0 else "Inactive Member"
         return "Active Membership"
 
+    # --- Credit Card ---
     if feature == "HasCrCard":
         if value is not None:
             return "Has Credit Card" if float(value) == 1.0 else "No Credit Card"
@@ -270,7 +301,11 @@ def build_model_input(
     is_active_value = 1 if is_active_member in ["Yes", 1] else 0
     geo_for_model = geography if geography in SUPPORTED_MODEL_GEOGRAPHIES else "France"
 
-    input_data = pd.DataFrame({
+    # Build the feature vector directly with manual one-hot encoding.
+    # NOTE: pd.get_dummies(..., drop_first=True) is unreliable on a single
+    # row because it only sees one unique value per column and drops the
+    # only dummy it creates, leaving all binary features as 0.
+    input_encoded = pd.DataFrame({
         "CreditScore": [credit_score],
         "Age": [age],
         "Tenure": [tenure_years],
@@ -281,17 +316,18 @@ def build_model_input(
         "EstimatedSalary": [estimated_salary],
         "Satisfaction Score": [satisfaction_score],
         "Point Earned": [point_earned],
-        "Geography": [geo_for_model],
-        "Gender": [gender],
-        "Card Type": [card_type],
+        # Geography one-hot (baseline = France)
+        "Geography_Germany": [1 if geo_for_model == "Germany" else 0],
+        "Geography_Spain": [1 if geo_for_model == "Spain" else 0],
+        # Gender one-hot (baseline = Female)
+        "Gender_Male": [1 if gender == "Male" else 0],
+        # Card Type one-hot (baseline = DIAMOND)
+        "Card Type_GOLD": [1 if card_type == "GOLD" else 0],
+        "Card Type_PLATINUM": [1 if card_type == "PLATINUM" else 0],
+        "Card Type_SILVER": [1 if card_type == "SILVER" else 0],
     })
 
-    input_encoded = pd.get_dummies(
-        input_data,
-        columns=["Geography", "Gender", "Card Type"],
-        drop_first=True
-    )
-
+    # Ensure column order matches the trained model's expectations
     input_encoded = input_encoded.reindex(
         columns=feature_columns,
         fill_value=0
@@ -333,12 +369,13 @@ def get_shap_explanation(input_encoded):
                 .reset_index(drop=True)
             )
 
+            input_row = input_encoded.iloc[0]
             risk_names = [
-                friendly_feature_name(row["Feature"], row["Input Value"])
+                friendly_feature_name(row["Feature"], row["Input Value"], input_row=input_row)
                 for _, row in risk_factors.iterrows()
             ]
             protective_names = [
-                friendly_feature_name(row["Feature"], row["Input Value"])
+                friendly_feature_name(row["Feature"], row["Input Value"], input_row=input_row)
                 for _, row in protective_factors.iterrows()
             ]
 
@@ -877,94 +914,97 @@ elif st.session_state.nav_page == "Customer Prediction":
     predict_clicked = st.button("🚀 Run Prediction & Explainability Analysis", type="primary", use_container_width=True)
 
     if predict_clicked:
-        tenure_years = min(10, round(tenure_months / 12))
+        with st.spinner("⏳ Running churn prediction, SHAP analysis & strategy engine — please wait..."):
+            tenure_years = min(10, round(tenure_months / 12))
 
-        input_encoded = build_model_input(
-            credit_score=credit_score,
-            geography=geography,
-            gender=gender,
-            age=age,
-            tenure_years=tenure_years,
-            balance=balance,
-            num_products=num_products,
-            has_cr_card=has_cr_card,
-            is_active_member=is_active_member,
-            estimated_salary=estimated_salary,
-            satisfaction_score=satisfaction_score,
-            point_earned=point_earned,
-            card_type=card_type,
-        )
+            input_encoded = build_model_input(
+                credit_score=credit_score,
+                geography=geography,
+                gender=gender,
+                age=age,
+                tenure_years=tenure_years,
+                balance=balance,
+                num_products=num_products,
+                has_cr_card=has_cr_card,
+                is_active_member=is_active_member,
+                estimated_salary=estimated_salary,
+                satisfaction_score=satisfaction_score,
+                point_earned=point_earned,
+                card_type=card_type,
+            )
 
-        # Predict
-        churn_prob_val = model.predict_proba(input_encoded)[0][1]
-        churn_prob_pct = churn_prob_val * 100
-        predicted_churn = churn_prob_val >= THRESHOLD
+            # Predict
+            churn_prob_val = model.predict_proba(input_encoded)[0][1]
+            churn_prob_pct = churn_prob_val * 100
+            predicted_churn = churn_prob_val >= THRESHOLD
 
-        # Risk bands are anchored to the deployment THRESHOLD so a customer
-        # can never be labeled "RETAINED" and a risk band above LOW at the
-        # same time (that contradiction was the source of confusing results
-        # like a 31% customer being written up as a churn case).
-        if churn_prob_val >= max(0.80, THRESHOLD + 0.30):
-            risk_level = "VERY HIGH"
-        elif churn_prob_val >= max(0.60, THRESHOLD + 0.10):
-            risk_level = "HIGH"
-        elif churn_prob_val >= THRESHOLD:
-            risk_level = "MEDIUM"
-        else:
-            risk_level = "LOW"
+            # Risk bands are anchored to the deployment THRESHOLD so a customer
+            # can never be labeled "RETAINED" and a risk band above LOW at the
+            # same time (that contradiction was the source of confusing results
+            # like a 31% customer being written up as a churn case).
+            if churn_prob_val >= max(0.80, THRESHOLD + 0.30):
+                risk_level = "VERY HIGH"
+            elif churn_prob_val >= max(0.60, THRESHOLD + 0.10):
+                risk_level = "HIGH"
+            elif churn_prob_val >= THRESHOLD:
+                risk_level = "MEDIUM"
+            else:
+                risk_level = "LOW"
 
-        # SHAP
-        risk_names, protective_names, local_shap, used_real_shap = get_shap_explanation(input_encoded)
+            # SHAP
+            risk_names, protective_names, local_shap, used_real_shap = get_shap_explanation(input_encoded)
 
-        # Rule strategy
-        (
-            primary_strategy,
-            detected_reasons,
-            recommended_actions,
-            strategy_priority,
-        ) = get_retention_strategy(
-            churn_probability=churn_prob_val,
-            is_active_member=is_active_member,
-            satisfaction_score=satisfaction_score,
-            balance=balance,
-            num_products=num_products,
-            tenure_years=tenure_years,
-        )
+            # Rule strategy
+            (
+                primary_strategy,
+                detected_reasons,
+                recommended_actions,
+                strategy_priority,
+            ) = get_retention_strategy(
+                churn_probability=churn_prob_val,
+                is_active_member=is_active_member,
+                satisfaction_score=satisfaction_score,
+                balance=balance,
+                num_products=num_products,
+                tenure_years=tenure_years,
+            )
 
-        # Customer dictionary for LLM
-        customer_dict = {
-            "CreditScore": credit_score,
-            "Geography": geography,
-            "Gender": gender,
-            "Age": age,
-            "TenureYears": tenure_years,
-            "Balance": balance,
-            "NumOfProducts": num_products,
-            "HasCrCard": has_cr_card,
-            "IsActiveMember": is_active_member,
-            "EstimatedSalary": estimated_salary,
-            "SatisfactionScore": satisfaction_score,
-            "CardType": card_type,
-            "PointEarned": point_earned,
-            "Complaint": complain
-        }
+            # Customer dictionary for LLM
+            customer_dict = {
+                "CreditScore": credit_score,
+                "Geography": geography,
+                "Gender": gender,
+                "Age": age,
+                "TenureYears": tenure_years,
+                "Balance": balance,
+                "NumOfProducts": num_products,
+                "HasCrCard": has_cr_card,
+                "IsActiveMember": is_active_member,
+                "EstimatedSalary": estimated_salary,
+                "SatisfactionScore": satisfaction_score,
+                "CardType": card_type,
+                "PointEarned": point_earned,
+                "Complaint": complain
+            }
 
-        # Save to session state
-        st.session_state.last_prediction = {
-            "prob_pct": churn_prob_pct,
-            "prob_val": churn_prob_val,
-            "predicted_churn": predicted_churn,
-            "risk_level": risk_level,
-            "risk_names": risk_names,
-            "protective_names": protective_names,
-            "used_real_shap": used_real_shap,
-            "primary_strategy": primary_strategy,
-            "detected_reasons": detected_reasons,
-            "recommended_actions": recommended_actions,
-            "strategy_priority": strategy_priority,
-            "customer_dict": customer_dict,
-            "input_encoded": input_encoded
-        }
+            # Save to session state
+            st.session_state.last_prediction = {
+                "prob_pct": churn_prob_pct,
+                "prob_val": churn_prob_val,
+                "predicted_churn": predicted_churn,
+                "risk_level": risk_level,
+                "risk_names": risk_names,
+                "protective_names": protective_names,
+                "used_real_shap": used_real_shap,
+                "primary_strategy": primary_strategy,
+                "detected_reasons": detected_reasons,
+                "recommended_actions": recommended_actions,
+                "strategy_priority": strategy_priority,
+                "customer_dict": customer_dict,
+                "input_encoded": input_encoded
+            }
+
+        st.success("✅ Analysis complete!")
 
     # Render Prediction Results if available
     if st.session_state.last_prediction is not None:
