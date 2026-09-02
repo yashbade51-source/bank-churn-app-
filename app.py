@@ -668,35 +668,6 @@ if st.session_state.nav_page == "Home":
     )
     st.divider()
 
-    # Highlights Cards
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("""
-        <div class="bank-card">
-            <h4>🔮 Predictive ML & SHAP</h4>
-            <p style="color: #64748B; font-size: 0.9rem;">
-                Trained XGBoost classifier with TreeExplainer breakdown identifying individual risk and protective factors.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    with c2:
-        st.markdown("""
-        <div class="bank-card">
-            <h4>🤖 AI Retention Copilot</h4>
-            <p style="color: #64748B; font-size: 0.9rem;">
-                LLM-powered retention advisor generating customized, actionable relationship interventions.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    with c3:
-        st.markdown("""
-        <div class="bank-card">
-            <h4>📊 Portfolio Analytics</h4>
-            <p style="color: #64748B; font-size: 0.9rem;">
-                Interactive portfolio dashboard with demographic segmentation, cohort analysis, and CSV batch uploads.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
 
     st.write("")
     st.subheader("Portfolio Analytics Overview")
