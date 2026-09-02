@@ -50,38 +50,90 @@ DEFAULT_LOCAL_MODEL = "llama3.2"
 DEFAULT_CLOUD_MODEL = "gpt-oss:20b"
 
 
-def generate_churn_explanation(customer_data, churn_probability, top_factors, model_name=None):
+def generate_churn_explanation(
+    customer_data,
+    churn_probability,
+    risk_factors=None,
+    protective_factors=None,
+    predicted_churn=None,
+    threshold_pct=50.0,
+    model_name=None,
+    # Back-compat: old callers may still pass a single merged list.
+    top_factors=None,
+):
     """
-    Generate structured churn explanation and practical retention actions using Ollama.
-    
+    Generate a structured churn explanation and retention actions using Ollama.
+
     Parameters:
-    - customer_data (dict): Customer feature dictionary.
+    - customer_data (dict): Customer feature dictionary. Not sent to the LLM
+      directly (see note below) -- kept in the signature for compatibility
+      and potential future use (e.g. logging).
     - churn_probability (float): Churn probability in percent (0-100).
-    - top_factors (list): Top risk and protective factors from ML/SHAP.
-    - model_name (str): Ollama model name (default: "llama3.2").
-    
+    - risk_factors (list): Factors that push this customer TOWARD churn.
+    - protective_factors (list): Factors that push this customer TOWARD retention.
+    - predicted_churn (bool): The model's actual predicted class at the deployment
+      threshold. Used to choose an accurate section header instead of always
+      framing the customer as a churn case.
+    - threshold_pct (float): Deployment decision threshold, in percent, for context.
+    - model_name (str): Ollama model name. Defaults to a cloud-available model
+      when using Ollama Cloud, or "llama3.2" when running against a local daemon.
+    - top_factors (list): Deprecated. If provided (and risk/protective are not),
+      treated as risk factors only, for backward compatibility.
+
     Returns:
-    - str: Markdown explanation and actionable retention steps.
+    - (str, str): tuple of (markdown explanation, provider label used --
+      "Ollama Cloud" or "Local Ollama" -- so the caller can display it).
     """
+    if risk_factors is None and top_factors is not None:
+        risk_factors = top_factors
+    risk_factors = risk_factors or []
+    protective_factors = protective_factors or []
+
+    if predicted_churn is None:
+        predicted_churn = churn_probability >= threshold_pct
+
+    # Only hand the LLM the specific, already-computed factors -- never the
+    # full raw customer_data -- so it can't invent commentary on fields
+    # (salary, card tier, etc.) that were never actually flagged as
+    # significant by the model/SHAP step.
+    factors_block = (
+        f"Risk factors (push toward churn): {risk_factors if risk_factors else 'None identified'}\n"
+        f"Protective factors (push toward retention): {protective_factors if protective_factors else 'None identified'}"
+    )
+
+    outcome_label = "CHURN RISK" if predicted_churn else "LIKELY TO STAY (RETAINED)"
+    factors_header = (
+        "### 🔍 FACTORS CONTRIBUTING TO CHURN:"
+        if predicted_churn
+        else "### 🔍 FACTORS SUPPORTING RETENTION (why this customer is low-risk):"
+    )
+    actions_header = (
+        "### 💡 SUGGESTIONS & RETENTION ACTIONS:"
+        if predicted_churn
+        else "### 💡 SUGGESTIONS TO STRENGTHEN THE RELATIONSHIP:"
+    )
+
     prompt = f"""
 XGBoost predicted churn probability: {churn_probability:.2f}%
+Deployment decision threshold: {threshold_pct:.0f}%
+Model's actual prediction for this customer: {outcome_label}
 
-Customer data:
-{customer_data}
-
-Factors identified by the ML/SHAP analysis:
-{top_factors}
+{factors_block}
 
 Give the response in exactly two sections:
 
-### 🔍 FACTORS CONTRIBUTING TO CHURN:
-List the most important factors and briefly explain each one.
+{factors_header}
+List ONLY the factors given above under "Risk factors" or "Protective factors"
+(whichever section applies) and briefly explain each one. Do not discuss any
+factor that was not explicitly listed above, and do not treat a protective
+factor as if it contributes to churn.
 
-### 💡 SUGGESTIONS & RETENTION ACTIONS:
-Give 3 practical actions the bank can take to retain this customer.
+{actions_header}
+Give 3 practical actions the bank can take, appropriate to whether this
+customer is actually predicted to churn or not.
 
 Keep the response short and specific.
-Do not make up factors that are not provided.
+Do not make up factors that are not provided above.
 """
 
     client = _get_client()

@@ -147,15 +147,19 @@ def load_model_and_artifacts():
         config = {"threshold": 0.5, "model_name": "XGBoost", "target": "Exited"}
         
     explainer = None
+    explainer_error = None
     if HAS_SHAP:
         try:
             explainer = shap.TreeExplainer(model)
-        except Exception:
+        except Exception as e:
             explainer = None
+            explainer_error = str(e)
+    else:
+        explainer_error = "shap package is not installed"
 
-    return model, feature_columns, config, explainer
+    return model, feature_columns, config, explainer, explainer_error
 
-model, feature_columns, config, shap_explainer = load_model_and_artifacts()
+model, feature_columns, config, shap_explainer, shap_explainer_error = load_model_and_artifacts()
 THRESHOLD = config.get("threshold", 0.5)
 
 
@@ -338,11 +342,13 @@ def get_shap_explanation(input_encoded):
                 for _, row in protective_factors.iterrows()
             ]
 
-            return risk_names, protective_names, local_shap
+            return risk_names, protective_names, local_shap, True
         except Exception:
             pass
 
-    # High-precision feature importance attribution fallback
+    # Rule-based fallback (used only when the real SHAP explainer is unavailable
+    # or fails on this input). These are generic banking heuristics, NOT derived
+    # from the trained model, so callers must be told this is a fallback.
     importances = getattr(model, "feature_importances_", None)
     if importances is None:
         importances = np.ones(len(feature_columns)) / len(feature_columns)
@@ -396,7 +402,7 @@ def get_shap_explanation(input_encoded):
         "Importance": importances
     })
 
-    return risk_names[:5], protective_names[:5], local_df
+    return risk_names[:5], protective_names[:5], local_df, False
 
 
 # ============================================================
@@ -894,17 +900,21 @@ elif st.session_state.nav_page == "Customer Prediction":
         churn_prob_pct = churn_prob_val * 100
         predicted_churn = churn_prob_val >= THRESHOLD
 
-        if churn_prob_val >= 0.80:
+        # Risk bands are anchored to the deployment THRESHOLD so a customer
+        # can never be labeled "RETAINED" and a risk band above LOW at the
+        # same time (that contradiction was the source of confusing results
+        # like a 31% customer being written up as a churn case).
+        if churn_prob_val >= max(0.80, THRESHOLD + 0.30):
             risk_level = "VERY HIGH"
-        elif churn_prob_val >= 0.60:
+        elif churn_prob_val >= max(0.60, THRESHOLD + 0.10):
             risk_level = "HIGH"
-        elif churn_prob_val >= 0.30:
+        elif churn_prob_val >= THRESHOLD:
             risk_level = "MEDIUM"
         else:
             risk_level = "LOW"
 
         # SHAP
-        risk_names, protective_names, local_shap = get_shap_explanation(input_encoded)
+        risk_names, protective_names, local_shap, used_real_shap = get_shap_explanation(input_encoded)
 
         # Rule strategy
         (
@@ -947,6 +957,7 @@ elif st.session_state.nav_page == "Customer Prediction":
             "risk_level": risk_level,
             "risk_names": risk_names,
             "protective_names": protective_names,
+            "used_real_shap": used_real_shap,
             "primary_strategy": primary_strategy,
             "detected_reasons": detected_reasons,
             "recommended_actions": recommended_actions,
@@ -988,6 +999,13 @@ elif st.session_state.nav_page == "Customer Prediction":
 
         # SHAP Explanation Cards
         st.subheader("🔍 Key Influencing Factors (SHAP Explainability)")
+        if not p.get('used_real_shap', True):
+            st.warning(
+                "⚠️ The real SHAP explainer wasn't available for this prediction "
+                f"({shap_explainer_error or 'unknown reason'}), so these factors come from a "
+                "generic rule-based fallback, not the trained model's actual reasoning. "
+                "Install/repair `shap` for this XGBoost version to get true local explanations."
+            )
         f_col1, f_col2 = st.columns(2)
 
         with f_col1:
@@ -1018,7 +1036,10 @@ elif st.session_state.nav_page == "Customer Prediction":
                     ai_explanation, provider_used = generate_churn_explanation(
                         customer_data=p['customer_dict'],
                         churn_probability=p['prob_pct'],
-                        top_factors=p['risk_names'] + p['protective_names']
+                        risk_factors=p['risk_names'],
+                        protective_factors=p['protective_names'],
+                        predicted_churn=p['predicted_churn'],
+                        threshold_pct=THRESHOLD * 100,
                     )
                     
                     st.markdown(f"""
