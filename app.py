@@ -1010,29 +1010,27 @@ elif st.session_state.nav_page == "Customer Prediction":
 
         # AI Copilot Section (Ollama)
         st.subheader("🤖 AI Retention Copilot")
-        st.caption("Generate natural-language retention strategy and tactical suggestions powered by local Ollama (Llama 3.2).")
+        st.caption("Generate natural-language retention strategy and tactical suggestions powered by Ollama.")
 
         if st.button("✨ Generate AI Retention Explanation & Action Plan", type="secondary"):
             with st.spinner("AI Copilot (Ollama) is analyzing customer profile and formulating strategy..."):
                 try:
-                    ai_explanation = generate_churn_explanation(
+                    ai_explanation, provider_used = generate_churn_explanation(
                         customer_data=p['customer_dict'],
                         churn_probability=p['prob_pct'],
                         top_factors=p['risk_names'] + p['protective_names']
                     )
                     
-                    st.markdown("""
+                    st.markdown(f"""
                     <div class="ai-card">
                         <div style="font-size: 0.85rem; color: #1E40AF; font-weight: 600; margin-bottom: 0.5rem;">
-                            🤖 Generated via Ollama (Llama 3.2)
+                            🤖 Generated via {provider_used}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                     st.markdown(ai_explanation)
                 except Exception as e:
-                    st.error(
-                        f"⚠️ Could not connect to local Ollama. Please make sure Ollama is running (`ollama run llama3.2`).\n\n**Details:** {e}"
-                    )
+                    st.error(f"⚠️ AI Copilot failed to generate a response.\n\n**Details:** {e}")
 
         st.divider()
 
