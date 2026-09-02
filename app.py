@@ -634,18 +634,8 @@ with st.sidebar:
     )
 
     st.divider()
-    st.markdown("##### ⚙️ AI Copilot Engine")
-    ai_provider = st.selectbox(
-        "LLM Provider",
-        options=["auto", "ollama", "openai", "fallback"],
-        format_func=lambda x: {
-            "auto": "⚡ Auto (Ollama / OpenAI / Fallback)",
-            "ollama": "🦙 Ollama (Local Llama 3.2)",
-            "openai": "✨ OpenAI (GPT-4o-mini)",
-            "fallback": "📋 Banking Expert Rule Engine"
-        }.get(x, x),
-        index=0
-    )
+    st.markdown("##### 🤖 AI Engine")
+    st.info("🦙 Ollama (Llama 3.2)")
 
     st.divider()
     st.markdown("##### 📁 Active Data Source")
@@ -660,12 +650,12 @@ with st.sidebar:
 if st.session_state.nav_page == "Home":
 
     st.title("🏦 Bank Customer Churn & Retention Platform")
-    st.write(
+    """st.write(
         "Welcome to the integrated Banking Intelligence Platform. "
         "Combine predictive Machine Learning (XGBoost), Explainable AI (SHAP), "
         "and Generative AI Retention Copilots to identify risk early, understand customer drivers, "
         "and take high-impact retention actions."
-    )
+    )"""
     st.divider()
 
 
@@ -995,27 +985,31 @@ elif st.session_state.nav_page == "Customer Prediction":
 
         st.divider()
 
-        # AI Copilot Section
+        # AI Copilot Section (Ollama)
         st.subheader("🤖 AI Retention Copilot")
-        st.caption("Generate natural-language retention strategy and tactical suggestions powered by LLM.")
+        st.caption("Generate natural-language retention strategy and tactical suggestions powered by local Ollama (Llama 3.2).")
 
         if st.button("✨ Generate AI Retention Explanation & Action Plan", type="secondary"):
-            with st.spinner("AI Copilot is analyzing customer behavior and formulating strategy..."):
-                ai_explanation, provider_used = generate_churn_explanation(
-                    customer_data=p['customer_dict'],
-                    churn_probability=p['prob_pct'],
-                    top_factors=p['risk_names'] + p['protective_names'],
-                    provider_preference=ai_provider
-                )
-                
-                st.markdown(f"""
-                <div class="ai-card">
-                    <div style="font-size: 0.85rem; color: #1E40AF; font-weight: 600; margin-bottom: 0.5rem;">
-                        🤖 Generated via: {provider_used}
+            with st.spinner("AI Copilot (Ollama) is analyzing customer profile and formulating strategy..."):
+                try:
+                    ai_explanation = generate_churn_explanation(
+                        customer_data=p['customer_dict'],
+                        churn_probability=p['prob_pct'],
+                        top_factors=p['risk_names'] + p['protective_names']
+                    )
+                    
+                    st.markdown("""
+                    <div class="ai-card">
+                        <div style="font-size: 0.85rem; color: #1E40AF; font-weight: 600; margin-bottom: 0.5rem;">
+                            🤖 Generated via Ollama (Llama 3.2)
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
-                st.markdown(ai_explanation)
+                    """, unsafe_allow_html=True)
+                    st.markdown(ai_explanation)
+                except Exception as e:
+                    st.error(
+                        f"⚠️ Could not connect to local Ollama. Please make sure Ollama is running (`ollama run llama3.2`).\n\n**Details:** {e}"
+                    )
 
         st.divider()
 

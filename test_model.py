@@ -86,21 +86,22 @@ except Exception as e:
     print("[OK] Feature importance attribution calculated.")
 
 print("\n" + "=" * 60)
-print("4. TESTING AI RETENTION COPILOT (LLM SERVICE)")
+print("4. TESTING AI RETENTION COPILOT (OLLAMA LLM SERVICE)")
 print("=" * 60)
 
-explanation, provider = generate_churn_explanation(
-    customer_data=sample_dict,
-    churn_probability=prob * 100,
-    top_factors=top_factors,
-    provider_preference="auto"
-)
-
-print(f"[OK] Provider used: {provider}")
-print("\nGenerated Explanation & Action Plan:")
-print("-" * 60)
-print(explanation)
-print("-" * 60)
+try:
+    explanation = generate_churn_explanation(
+        customer_data=sample_dict,
+        churn_probability=prob * 100,
+        top_factors=top_factors
+    )
+    print("[OK] Ollama response received successfully:")
+    print("-" * 60)
+    print(explanation)
+    print("-" * 60)
+except Exception as e:
+    print(f"ℹ️ Ollama offline or not started: {e}")
+    print("  (Start local Ollama using: ollama run llama3.2)")
 
 print("\n" + "=" * 60)
 print("5. TESTING DATASET INTEGRITY")
@@ -111,4 +112,4 @@ if os.path.exists("Customer-Churn-Records.csv"):
 else:
     print("[FAIL] Customer-Churn-Records.csv missing!")
 
-print("\n*** ALL VERIFICATION TESTS PASSED SUCCESSFULLY! ***")
+print("\n*** ALL VERIFICATION TESTS COMPLETED! ***")

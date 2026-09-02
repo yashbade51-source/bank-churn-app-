@@ -1,6 +1,6 @@
 # 🏦 Bank Customer Churn Prediction & Retention Platform
 
-An integrated Machine Learning, Explainable AI (SHAP), and Generative AI Retention Copilot platform designed for banking relationship managers and analytics teams.
+An integrated Machine Learning, Explainable AI (SHAP), and Local Generative AI Retention Copilot platform designed for banking relationship managers and analytics teams.
 
 ---
 
@@ -15,12 +15,9 @@ An integrated Machine Learning, Explainable AI (SHAP), and Generative AI Retenti
    - Real-time `shap.TreeExplainer` computing local feature impacts.
    - Distinct breakdown of **Risk Drivers** (factors elevating churn risk) and **Protective Factors** (attributes supporting retention).
 
-3. **🤖 Generative AI Retention Copilot**
-   - Natural language retention insights and tactical action plans.
-   - Multi-provider support:
-     - 🦙 **Ollama (Llama 3.2)** for local offline inference.
-     - ✨ **OpenAI (GPT-4o-mini)** via `.streamlit/secrets.toml` or `OPENAI_API_KEY`.
-     - 📋 **Banking Expert Rule Engine** fallback when offline.
+3. **🤖 Generative AI Retention Copilot (Ollama)**
+   - Natural language retention insights and tactical action plans powered by local **Ollama (`llama3.2`)**.
+   - 100% private, local on-device LLM inference.
 
 4. **📊 Interactive Portfolio Analytics (EDA Dashboard)**
    - Portfolio overview with KPI tiles (Total Customers, Retained, Churned, Churn Rate).
@@ -37,7 +34,7 @@ An integrated Machine Learning, Explainable AI (SHAP), and Generative AI Retenti
 
 ```text
 ├── app.py                      # Main Streamlit web application
-├── llm_service.py              # AI Copilot service (Ollama, OpenAI, Rule Engine)
+├── llm_service.py              # Local Ollama AI Retention Copilot
 ├── test_model.py               # Comprehensive verification test suite
 ├── best_churn_model.pkl        # Trained XGBoost classification model
 ├── feature_columns.pkl         # Expected model feature schema
@@ -46,8 +43,7 @@ An integrated Machine Learning, Explainable AI (SHAP), and Generative AI Retenti
 ├── Hackathon_project.ipynb     # Model training & EDA Jupyter Notebook
 ├── requirements.txt            # Python dependencies
 └── .streamlit/
-    ├── config.toml             # Streamlit visual theme configuration
-    └── secrets.toml            # Optional API keys (OpenAI, etc.)
+    └── config.toml             # Streamlit visual theme configuration
 ```
 
 ---
@@ -59,24 +55,18 @@ An integrated Machine Learning, Explainable AI (SHAP), and Generative AI Retenti
 pip install -r requirements.txt
 ```
 
-### 2. Run the Test Suite
+### 2. Start Ollama
+```bash
+ollama run llama3.2
+```
+
+### 3. Run the Test Suite
 ```bash
 python test_model.py
 ```
 
-### 3. Launch the Application
+### 4. Launch the Application
 ```bash
 streamlit run app.py
 ```
 Open your browser at `http://localhost:8501`.
-
----
-
-## ⚙️ AI Copilot Configuration (Optional)
-
-- **Local Ollama**: Ensure Ollama is running (`ollama run llama3.2`).
-- **OpenAI**: Add your key in `.streamlit/secrets.toml`:
-  ```toml
-  OPENAI_API_KEY = "your-api-key-here"
-  ```
-- **Fallback Engine**: If no LLM endpoint is reachable, the built-in banking rule engine automatically provides structured, context-aware retention strategies without interruption.
