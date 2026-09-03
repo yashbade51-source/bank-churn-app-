@@ -698,10 +698,10 @@ with st.sidebar:
     st.markdown("### 🏦 Banking Intelligence")
     st.divider()
 
-    NAV_OPTIONS = ["Home", "Customer Prediction", "Analytics", "Data Upload"]
+    NAV_OPTIONS = ["Home", "Customer Prediction", "Analytics"]
     if "nav_page" not in st.session_state or st.session_state.nav_page not in NAV_OPTIONS:
         st.session_state.nav_page = "Home"
-
+    
     st.radio(
         "Navigation",
         options=NAV_OPTIONS,
@@ -1203,8 +1203,6 @@ elif st.session_state.nav_page == "Analytics":
 
 # ============================================================
 # PAGE 4 — DATA UPLOAD
-# ============================================================
-
 elif st.session_state.nav_page == "Data Upload":
 
     st.title("📁 Customer Data & Batch Upload")
